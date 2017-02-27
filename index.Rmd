@@ -1,0 +1,133 @@
+---
+title: "Course Project - Practical Machine Learning"
+author: "Dominique Gijzen"
+date: "21 januari 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+require("caret")
+require("ggplot2")
+require("caret")
+require("corrplot")
+```
+
+# get the data
+
+The data is downloaded via the given link and is loaded into R. Upon inspection there seem to be several missing and/or faulty fields. I've chosen to classify them as NA's. This also solves the problem that some of the data are loaded as factors.
+
+```{r, cache=TRUE}
+trainData <- read.csv("pml-training.csv", na.strings = c("NA", "#DIV/0!"))
+testData <- read.csv("pml-testing.csv", na.strings = c("NA", "#DIV/0!"))
+```
+
+# prepare the data
+
+The original data sets are copied to a working copy for further analysis.
+
+```{r}
+training <- trainData
+testing <- testData
+```
+
+## First look
+
+To prepare the data, we will look at a few different aspects of the data. Head, str and summary to start with. To look at these yourself, uncomment next lines.
+
+```{r}
+##head(trainData)
+##str(trainData)
+##summary(trainData)
+```
+
+## ID columns
+
+The first seven colums are used for identification. They serve no good for model training.
+
+```{r}
+dim(training)
+training <- training[, -(1:7)]
+dim(training)
+```
+
+## Missing values
+
+There are lot of missing values. Columns with almost only missing values (more than 90% missing) will be deleted.
+
+```{r}
+dim(training)
+NAColumns <- sapply(training, function(x) mean(is.na(x))) > 0.90
+training <- training[, NAColumns==F]
+dim(training)
+```
+
+# Near Zero Variance
+
+In the first look, all columns with few NA's seemed to have some or more variance. To be sure next code block will check for near zero variance and delete them eventually.
+
+```{r}
+NZV <- nearZeroVar(training)
+print(NZV)
+```
+
+There are no NZV.
+
+## Splitting for cross validation
+
+```{r}
+inTrain <- createDataPartition(training$classe, p = 0.6, list = F)
+TrainSet <- training[inTrain, ]
+TestSet <- training[-inTrain, ]
+```
+
+# explorate the data
+
+```{r}
+TrainSetCor <- cor(TrainSet[,-53])
+corrplot(TrainSetCor, method = "color", order = "FPC", tl.cex = 0.7)
+```
+
+The dark colors, red and blue, show strong correlations. There are a few and maybe a principle component analysis can make a difference for the training model. If the model has not enough accuracy, this will be done.
+
+# Training a model
+
+The first model is a decision tree and the second model random forest. Depending on the achieved accuracies when corss validating, a boost model will be used and perhaps a stacked model.
+
+## Decision tree
+
+```{r, cache = TRUE}
+modDT <- train(classe ~ ., data = TrainSet, method = "rpart")
+modDT
+```
+
+Accuracy is 50% which is not good. Training with another model is necessary.
+
+## Random Forests
+
+```{r, cache = TRUE}
+modRF <- train(classe ~ ., data = TrainSet, method = "rf")
+modRF
+```
+
+Accuracy is 98%, which is very good and almost twice the decision tree. Extra tweaking or another model could help. But this is not the intention of this project. Next step is validating/testing the prediction model.
+
+## Validate the model
+
+To validate, and check for out-of-sample error, the given train data was sliced (see above).
+
+```{r, cache=TRUE}
+predRF <- predict(modRF, newdata = TestSet)
+confusionMatrix(predRF, TestSet$classe)
+```
+
+Cross validating with the validating set also shows a high accuracy of 99%. We may assume that this model will achieve good accuracy on the given test set -> little out-of-sampple error.
+
+
+
+
